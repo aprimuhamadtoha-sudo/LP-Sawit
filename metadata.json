@@ -1,0 +1,6 @@
+{
+  "name": "Kasir Timbangan Lapak Sawit",
+  "description": "Aplikasi pengelolaan transaksi timbangan, harga harian, kas lapak, and pelaporan bulanan sawit terintegrasi real-time dengan Google Sheets API.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
