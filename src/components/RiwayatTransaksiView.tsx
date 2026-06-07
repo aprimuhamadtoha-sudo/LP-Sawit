@@ -49,7 +49,7 @@ export default function RiwayatTransaksiView({ state, onUpdate, onDelete, onTrig
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Authorization checks
-  const isAdminOrOwner = currentUser?.role === 'Admin' || currentUser?.role === 'Owner';
+  const isAdminOrOwner = currentUser?.role === 'Admin' || currentUser?.role === 'Owner' || currentUser?.role === 'Developer';
 
   // Apply filters on the transaction history array
   const filteredTransactions = transaksi.filter(t => {
@@ -150,7 +150,7 @@ export default function RiwayatTransaksiView({ state, onUpdate, onDelete, onTrig
     const confirmDelete = window.confirm(
       `⚠️ TINDAKAN DESTRUKTIF ⚠️\n\n` +
       `Apakah Anda yakin ingin menghapus transaksi ${id}?\n` +
-      `Tindakan ini akan menghapus data timbangan di database lokal and spreadsheet secara permanen!`
+      `Tindakan ini akan menghapus data timbangan secara permanen!`
     );
 
     if (confirmDelete) {

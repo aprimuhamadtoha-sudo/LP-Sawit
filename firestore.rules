@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Dynamic settings
+    match /settings/{docId} {
+      allow read, write: if true;
+    }
+    // Employee user credentials database
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+    // Dynamic roles database for configuration
+    match /roles/{roleId} {
+      allow read, write: if true;
+    }
+    // Daily TBS prices
+    match /hargaHarian/{tanggal} {
+      allow read, write: if true;
+    }
+    // Invoices and weighbridge items
+    match /transaksi/{id_transaksi} {
+      allow read, write: if true;
+    }
+    // Petty cash journals
+    match /kas/{id_kas} {
+      allow read, write: if true;
+    }
+    // Direct dispatch bulk logs
+    match /penjualan/{id_penjualan} {
+      allow read, write: if true;
+    }
+    // System audit logs
+    match /auditLogs/{id_log} {
+      allow read, write: if true;
+    }
+    
+    // Default fallback rule
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

@@ -13,8 +13,16 @@ export const DEFAULT_SETTING: LapakSetting = {
 // Default seeded users
 export const DEFAULT_USERS: UserAccount[] = [
   {
+    user_id: 'USR-DEV',
+    nama: 'Pengembang (Developer)',
+    username: 'developer',
+    password_hash: 'developer123',
+    role: 'Developer',
+    status: 'Aktif'
+  },
+  {
     user_id: 'USR-001',
-    nama: 'Haji Apri',
+    nama: 'Haji Apri (Backup Owner)',
     username: 'owner',
     password_hash: 'owner123', // plain for simple preview login
     role: 'Owner',
@@ -30,7 +38,7 @@ export const DEFAULT_USERS: UserAccount[] = [
   },
   {
     user_id: 'USR-003',
-    nama: 'Siti Kasir',
+    nama: 'Kasir',
     username: 'kasir',
     password_hash: 'kasir123',
     role: 'Kasir',
@@ -38,7 +46,7 @@ export const DEFAULT_USERS: UserAccount[] = [
   },
   {
     user_id: 'USR-004',
-    nama: 'Andi Admin',
+    nama: 'Pemilik Toko',
     username: 'admin',
     password_hash: 'admin123',
     role: 'Admin',
@@ -80,11 +88,14 @@ export const DEFAULT_LOGS: AuditLog[] = [
 const LOCAL_STORAGE_KEY = 'LAPAK_SAWIT_APP_STATE';
 
 export function loadLocalState(): AppState {
+  const defaultRoles = ['Owner', 'Admin', 'Operator Timbangan', 'Kasir', 'Developer'];
   const serialized = localStorage.getItem(LOCAL_STORAGE_KEY);
   if (!serialized) {
     // Generate fresh seeded state
     const state: AppState = {
       users: DEFAULT_USERS,
+      roles: defaultRoles,
+      roleConfigs: [],
       hargaHarian: DEFAULT_HARGA,
       transaksi: DEFAULT_TRANSAKSI,
       kas: DEFAULT_KAS,
@@ -107,6 +118,8 @@ export function loadLocalState(): AppState {
     // Ensure all structures are present
     return {
       users: parsed.users || DEFAULT_USERS,
+      roles: parsed.roles || defaultRoles,
+      roleConfigs: parsed.roleConfigs || [],
       hargaHarian: parsed.hargaHarian || DEFAULT_HARGA,
       transaksi: parsed.transaksi || DEFAULT_TRANSAKSI,
       kas: parsed.kas || DEFAULT_KAS,
@@ -125,6 +138,8 @@ export function loadLocalState(): AppState {
     // Return safe default
     return {
       users: DEFAULT_USERS,
+      roles: defaultRoles,
+      roleConfigs: [],
       hargaHarian: DEFAULT_HARGA,
       transaksi: DEFAULT_TRANSAKSI,
       kas: DEFAULT_KAS,

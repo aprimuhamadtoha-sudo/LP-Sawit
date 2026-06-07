@@ -1,4 +1,4 @@
-export type UserRole = 'Owner' | 'Admin' | 'Operator Timbangan' | 'Kasir';
+export type UserRole = 'Owner' | 'Admin' | 'Operator Timbangan' | 'Kasir' | 'Developer';
 
 export interface UserAccount {
   user_id: string;
@@ -74,8 +74,16 @@ export interface LapakSetting {
   spreadsheet_id: string;
 }
 
+export interface RoleConfig {
+  id: string;
+  role_name: string;
+  menus: string[];
+}
+
 export interface AppState {
   users: UserAccount[];
+  roles: string[];
+  roleConfigs?: RoleConfig[];
   hargaHarian: HargaHarian[];
   transaksi: TransaksiTimbang[];
   kas: KasRecord[];
@@ -89,3 +97,11 @@ export interface AppState {
   isSyncing: boolean;
   theme: 'light' | 'dark';
 }
+
+export const DEFAULT_ROLE_MENUS: Record<string, string[]> = {
+  'Developer': ['dashboard', 'timbang', 'harga', 'riwayat', 'laporan', 'kas', 'master', 'pengaturan'],
+  'Owner': ['dashboard', 'timbang', 'harga', 'riwayat', 'laporan', 'kas', 'pengaturan'],
+  'Admin': ['dashboard', 'timbang', 'harga', 'riwayat', 'laporan', 'kas', 'pengaturan'],
+  'Operator Timbangan': ['dashboard', 'timbang', 'harga', 'riwayat', 'pengaturan'],
+  'Kasir': ['dashboard', 'harga', 'riwayat', 'laporan', 'kas', 'pengaturan']
+};

@@ -178,7 +178,7 @@ export default function Dashboard({ state, setActiveTab }: DashboardProps) {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white px-6 py-5 rounded-2xl border border-slate-100 shadow-sm gap-4" id="intro-bar">
         <div>
           <h1 className="text-xl font-bold text-slate-800 font-sans tracking-tight">Selamat Datang, {state.currentUser?.nama}</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Role: <span className="font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-md">{state.currentUser?.role}</span> • Lapak: <span className="font-semibold">{state.setting.nama_lapak || 'Timbangan Sawit'}</span></p>
+          <p className="text-slate-400 text-xs mt-0.5">Lapak: <span className="font-semibold">{state.setting.nama_lapak || 'Timbangan Sawit'}</span></p>
         </div>
         <div className="flex items-center gap-2">
           {state.currentUser?.role !== 'Kasir' && (
@@ -201,57 +201,6 @@ export default function Dashboard({ state, setActiveTab }: DashboardProps) {
           )}
         </div>
       </div>
-
-      {/* Background Sync Queue Status Alert */}
-      {(() => {
-        const pTrx = transaksi.filter(t => t.sync_status === 'pending' || t.sync_status === 'failed').length;
-        const pKas = kas.filter(k => k.sync_status === 'pending' || k.sync_status === 'failed').length;
-        const pPen = penjualan.filter(p => p.sync_status === 'pending' || p.sync_status === 'failed').length;
-        const pLog = (state.auditLogs || []).filter(l => l.sync_status === 'pending' || l.sync_status === 'failed').length;
-        const totalUnsynced = pTrx + pKas + pPen + pLog;
-
-        if (totalUnsynced === 0) return null;
-
-        return (
-          <div className={`p-5 rounded-2xl border flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${
-            state.isOnline 
-              ? 'bg-amber-500/5 border-amber-500/10 text-amber-800' 
-              : 'bg-slate-500/5 border-slate-500/10 text-slate-700'
-          }`} id="background-queue-tracker-box">
-            <div className="flex items-start gap-3">
-              <div className={`p-2.5 rounded-xl ${state.isOnline ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'} shrink-0 mt-0.5`}>
-                <AlertCircle size={18} className={state.isSyncing && state.isOnline ? 'animate-bounce' : ''} />
-              </div>
-              <div>
-                <h4 className="font-bold text-sm tracking-tight text-slate-800">
-                  {state.isOnline ? 'Prosedur Sinkronisasi Latar Belakang Aktif' : 'Antrean Modus Offline Aktif'}
-                </h4>
-                <p className="text-xs mt-1 leading-relaxed text-slate-500">
-                  {state.isOnline 
-                    ? `Terdeteksi ${totalUnsynced} data transaksi/kas yang tertunda akibat fluktuasi koneksi. Sistem sedang mensinkronkan ulang data ini ke Google Sheets secara bertahap di latar belakang.`
-                    : `Anda sedang menggunakan aplikasi secara offline. Terdapat ${totalUnsynced} rekaman baru yang tersimpan aman secara lokal dan akan otomatis diunggah ke Google Sheets begitu koneksi internet stabil.`
-                  }
-                </p>
-                {/* Details Breakdown tag capsules */}
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {pTrx > 0 && <span className="text-[10px] px-2 py-0.5 rounded-lg bg-white/80 text-slate-600 font-bold border border-slate-150">Timbangan: {pTrx}</span>}
-                  {pKas > 0 && <span className="text-[10px] px-2 py-0.5 rounded-lg bg-white/80 text-slate-600 font-bold border border-slate-150">Kas Operasional: {pKas}</span>}
-                  {pPen > 0 && <span className="text-[10px] px-2 py-0.5 rounded-lg bg-white/80 text-slate-600 font-bold border border-slate-150">Penjualan PKS: {pPen}</span>}
-                  {pLog > 0 && <span className="text-[10px] px-2 py-0.5 rounded-lg bg-white/80 text-slate-600 font-bold border border-slate-150">Log Audit: {pLog}</span>}
-                </div>
-              </div>
-            </div>
-            {state.isOnline && (
-              <div className="flex items-center gap-2 shrink-0 md:self-center">
-                <span className="text-xs font-bold text-amber-600 animate-pulse flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
-                  Sinkronisasi...
-                </span>
-              </div>
-            )}
-          </div>
-        );
-      })()}
 
       {/* --- SECTION 1: RINGKASAN HARI INI --- */}
       <div>

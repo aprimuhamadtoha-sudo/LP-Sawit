@@ -34,7 +34,7 @@ export default function HargaHarianView({ state, onSavePrice }: HargaHarianProps
   const [successMsg, setSuccessMsg] = useState('');
 
   // Determine authorized roles
-  const canModify = currentUser?.role === 'Admin' || currentUser?.role === 'Owner';
+  const canModify = currentUser?.role === 'Admin' || currentUser?.role === 'Owner' || currentUser?.role === 'Developer';
 
   // Sort prices by date descending
   const sortedPrices = [...hargaHarian].sort((a, b) => b.tanggal.localeCompare(a.tanggal));

@@ -1,0 +1,161 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "User Account",
+      "description": "System operational accounts for employees and developers",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "nama": { "type": "string" },
+        "username": { "type": "string" },
+        "password_hash": { "type": "string" },
+        "role": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["user_id", "nama", "username", "password_hash", "role", "status"]
+    },
+    "HargaHarian": {
+      "title": "Harga Harian TBS",
+      "description": "Daily palm oil purchase unit price settings",
+      "type": "object",
+      "properties": {
+        "tanggal": { "type": "string", "format": "date" },
+        "harga_tbs": { "type": "number" },
+        "harga_brondolan": { "type": "number" }
+      },
+      "required": ["tanggal", "harga_tbs", "harga_brondolan"]
+    },
+    "TransaksiTimbang": {
+      "title": "Transaksi Timbang",
+      "description": "Weighbridge pricing tickets and receipts data",
+      "type": "object",
+      "properties": {
+        "id_transaksi": { "type": "string" },
+        "tanggal": { "type": "string", "format": "date" },
+        "jam": { "type": "string" },
+        "id_petani": { "type": "string" },
+        "nama_petani": { "type": "string" },
+        "jenis_sawit": { "type": "string", "enum": ["TBS", "Brondolan"] },
+        "kendaraan": { "type": "string" },
+        "supir": { "type": "string" },
+        "berat_kotor": { "type": "number" },
+        "berat_tara": { "type": "number" },
+        "potongan": { "type": "number" },
+        "berat_bersih": { "type": "number" },
+        "harga_kg": { "type": "number" },
+        "total_bayar": { "type": "number" },
+        "operator": { "type": "string" },
+        "sync_status": { "type": "string", "enum": ["synced", "pending", "failed"] }
+      },
+      "required": [
+        "id_transaksi", "tanggal", "jam", "id_petani", "nama_petani", 
+        "jenis_sawit", "berat_kotor", "berat_tara", "potongan", 
+        "berat_bersih", "harga_kg", "total_bayar", "operator"
+      ]
+    },
+    "KasRecord": {
+      "title": "Buku Jurnal Kas",
+      "description": "Financial petty cash flow records",
+      "type": "object",
+      "properties": {
+        "id_kas": { "type": "string" },
+        "tanggal": { "type": "string", "format": "date" },
+        "jenis": { "type": "string", "enum": ["Masuk", "Keluar"] },
+        "kategori": { "type": "string" },
+        "keterangan": { "type": "string" },
+        "nominal": { "type": "number" },
+        "user": { "type": "string" },
+        "sync_status": { "type": "string", "enum": ["synced", "pending", "failed"] }
+      },
+      "required": ["id_kas", "tanggal", "jenis", "kategori", "keterangan", "nominal", "user"]
+    },
+    "PenjualanRecord": {
+      "title": "Buku Penjualan Bulk",
+      "description": "Bulk sales dispatches to palm oil mills",
+      "type": "object",
+      "properties": {
+        "id_penjualan": { "type": "string" },
+        "tanggal": { "type": "string", "format": "date" },
+        "pembeli": { "type": "string" },
+        "jenis_sawit": { "type": "string", "enum": ["TBS", "Brondolan"] },
+        "berat": { "type": "number" },
+        "harga_jual": { "type": "number" },
+        "total": { "type": "number" },
+        "sync_status": { "type": "string", "enum": ["synced", "pending", "failed"] }
+      },
+      "required": ["id_penjualan", "tanggal", "pembeli", "jenis_sawit", "berat", "harga_jual", "total"]
+    },
+    "AuditLog": {
+      "title": "Audit Log Keaslian",
+      "description": "Unalterable system operational audit logs",
+      "type": "object",
+      "properties": {
+        "id_log": { "type": "string" },
+        "tanggal": { "type": "string" },
+        "user": { "type": "string" },
+        "aktivitas": { "type": "string" },
+        "detail": { "type": "string" },
+        "sync_status": { "type": "string", "enum": ["synced", "pending", "failed"] }
+      },
+      "required": ["id_log", "tanggal", "user", "aktivitas", "detail"]
+    },
+    "LapakSetting": {
+      "title": "Lapak Settings",
+      "description": "Scale station metadata settings",
+      "type": "object",
+      "properties": {
+        "nama_lapak": { "type": "string" },
+        "logo_lapak": { "type": "string" },
+        "alamat": { "type": "string" },
+        "telp": { "type": "string" },
+        "nama_pemilik": { "type": "string" },
+        "spreadsheet_id": { "type": "string" }
+      },
+      "required": ["nama_lapak", "alamat", "telp", "nama_pemilik"]
+    },
+    "AppRole": {
+      "title": "Dynamic User Role",
+      "description": "Dynamically created employee and access rights roles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "role_name": { "type": "string" }
+      },
+      "required": ["id", "role_name"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "UserAccount" },
+      "description": "Employee user accounts"
+    },
+    "/hargaHarian/{tanggal}": {
+      "schema": { "$ref": "HargaHarian" },
+      "description": "Daily oil purchase settings keyed by date"
+    },
+    "/transaksi/{id_transaksi}": {
+      "schema": { "$ref": "TransaksiTimbang" },
+      "description": "Scale pricing records"
+    },
+    "/kas/{id_kas}": {
+      "schema": { "$ref": "KasRecord" },
+      "description": "Operational cash balance records"
+    },
+    "/penjualan/{id_penjualan}": {
+      "schema": { "$ref": "PenjualanRecord" },
+      "description": "Direct sales records of TBS or brandolans to mills"
+    },
+    "/auditLogs/{id_log}": {
+      "schema": { "$ref": "AuditLog" },
+      "description": "Inviolable system logs"
+    },
+    "/settings/{docId}": {
+      "schema": { "$ref": "LapakSetting" },
+      "description": "Lapak setting metadata"
+    },
+    "/roles/{roleId}": {
+      "schema": { "$ref": "AppRole" },
+      "description": "Dynamic roles list"
+    }
+  }
+}

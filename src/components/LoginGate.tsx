@@ -7,9 +7,10 @@ interface LoginGateProps {
   users: UserAccount[];
   onLoginSuccess: (user: UserAccount) => void;
   lapakName: string;
+  syncError?: string | null;
 }
 
-export default function LoginGate({ users, onLoginSuccess, lapakName }: LoginGateProps) {
+export default function LoginGate({ users, onLoginSuccess, lapakName, syncError }: LoginGateProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -63,7 +64,41 @@ export default function LoginGate({ users, onLoginSuccess, lapakName }: LoginGat
           <p className="text-emerald-100 text-xs mt-1 font-semibold">Sistem Informasi Timbangan & Kasir Lapak Sawit</p>
         </div>
 
-        <div className="p-6 sm:p-8">
+        <div className="p-6 sm:p-8 font-sans">
+          {syncError && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900 space-y-2.5 mb-5 leading-relaxed">
+              <div className="flex items-center gap-2 font-black text-amber-800">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0 animate-ping"></span>
+                <span>💡 Aturan Keamanan Firebase Butuh Diperbarui (Security Rules)</span>
+              </div>
+              <p className="text-[11px] text-amber-850">
+                Database Firebase pribadi Anda (<strong className="font-bold text-amber-900">lapaksawit-arafat</strong>) saat ini menolak sinkronisasi karena aturan keamanannya (Security Rules) terkunci secara default.
+              </p>
+              <div className="pt-2 border-t border-amber-200/60 space-y-2 text-[10.5px]">
+                <p className="font-bold text-amber-900">Ikuti langkah mudah di bawah ini untuk memperbaiki secara manual:</p>
+                <ol className="list-decimal list-inside space-y-1 pl-1 text-amber-850 font-medium">
+                  <li>Buka tautan ini: <a href="https://console.firebase.google.com/project/lapaksawit-arafat/firestore/rules" target="_blank" rel="noopener noreferrer" className="font-bold text-emerald-700 underline hover:text-emerald-800">Firebase Console Security Rules</a></li>
+                  <li>Hapus semua isi kode di tab Rules, lalu salin dan tempel (paste) script berikut:</li>
+                </ol>
+                <pre className="bg-zinc-800 p-2.5 rounded-xl font-mono text-[9px] text-amber-100 border border-zinc-900 overflow-x-auto max-h-36 block">
+{`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}`}
+                </pre>
+                <p className="font-bold text-amber-900 mt-2">3. Klik tombol "Publish" di pojok kanan atas halaman Firebase Console.</p>
+                <div className="bg-amber-100/50 p-2 rounded-lg border border-amber-200 font-semibold text-amber-900 flex items-start gap-1.5 mt-1.5">
+                  <span className="text-amber-600 shrink-0">💡</span>
+                  <span>Setelah menerbitkan rules baru di atas, silakan klik tombol <strong>"Reset Cache & Kredensial Lokal"</strong> di bagian bawah halaman ini untuk memulihkan akun bawaan dan login kembali!</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleLogin} className="space-y-5">
             {error && (
               <div className="bg-red-50 text-red-600 p-3 rounded-xl text-xs font-semibold border border-red-100 flex items-center gap-2">
@@ -129,10 +164,23 @@ export default function LoginGate({ users, onLoginSuccess, lapakName }: LoginGat
           </form>
 
           {/* Clean Guidance Note */}
-          <div className="mt-6 pt-5 border-t border-gray-100 text-center">
+          <div className="mt-6 pt-5 border-t border-gray-100 text-center space-y-3">
             <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
               Gunakan kredensial yang terdaftar di Sistem Manajemen Karyawan untuk masuk. Hubungi pemilik lapak jika Anda lupa password Anda.
             </p>
+            <button
+              type="button"
+              onClick={() => {
+                const confirmed = window.confirm('Apakah Anda ingin mereset cache data login browser lokal? Semua status lokal akan dikosongkan dan akun bawaan default akan dipulihkan.');
+                if (confirmed) {
+                  localStorage.removeItem('LAPAK_SAWIT_APP_STATE');
+                  window.location.reload();
+                }
+              }}
+              className="text-[10px] text-emerald-600 hover:text-emerald-700 hover:underline font-bold transition-all cursor-pointer bg-transparent border-none py-1"
+            >
+              Reset Cache & Kredensial Lokal (Gunakan jika gagal masuk)
+            </button>
           </div>
         </div>
       </motion.div>

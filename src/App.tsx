@@ -14,6 +14,20 @@ import {
 } from './storage';
 import { initAuth, googleSignIn, logoutGoogle, getAccessToken, setAccessToken } from './authService';
 import { fetchSheetRows, saveFullTable, appendRow, SHEET_HEADERS, SheetMappers } from './sheetsService';
+import {
+  pullAllDataFromFirestore,
+  saveUserToFirestore,
+  deleteUserFromFirestore,
+  saveRoleToFirestore,
+  deleteRoleFromFirestore,
+  saveHargaToFirestore,
+  saveTransaksiToFirestore,
+  deleteTransaksiFromFirestore,
+  saveKasToFirestore,
+  savePenjualanToFirestore,
+  saveSettingToFirestore,
+  saveAuditLogToFirestore
+} from './firebaseService';
 
 // Icons
 import { 
@@ -36,7 +50,8 @@ import {
   Trash2,
   RefreshCw,
   Clock,
-  Database
+  Database,
+  ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -49,11 +64,63 @@ import RiwayatTransaksiView from './components/RiwayatTransaksiView';
 import LaporanView from './components/LaporanView';
 import KasView from './components/KasView';
 import PengaturanView from './components/PengaturanView';
-import KonektivitasSheetsView from './components/KonektivitasSheetsView';
+import MasterManagerView from './components/MasterManagerView';
 
 export default function App() {
   // Global Application State loading from cache or Defaults
   const [state, setState] = useState<AppState>(() => loadLocalState());
+  const [firestoreSyncError, setFirestoreSyncError] = useState<string | null>(null);
+
+  // Synchronously load database documents from Cloud Firestore upon initialization
+  useEffect(() => {
+    let ignore = false;
+    const fetchCloudDbData = async () => {
+      try {
+        console.log('[Firestore Sync] Mengambil snapshots data dari Firebase Cloud...');
+        const fullCloud = await pullAllDataFromFirestore();
+        if (!ignore) {
+          if (fullCloud.syncError) {
+            setFirestoreSyncError(fullCloud.syncError);
+          }
+          setState(prev => {
+            const nextState = {
+              ...prev,
+              users: fullCloud.users.length > 0 ? fullCloud.users : prev.users,
+              roles: fullCloud.roles.length > 0 ? fullCloud.roles : prev.roles,
+              hargaHarian: fullCloud.hargaHarian.length > 0 ? fullCloud.hargaHarian : prev.hargaHarian,
+              transaksi: fullCloud.transaksi.length > 0 ? fullCloud.transaksi : prev.transaksi,
+              kas: fullCloud.kas.length > 0 ? fullCloud.kas : prev.kas,
+              penjualan: fullCloud.penjualan.length > 0 ? fullCloud.penjualan : prev.penjualan,
+              auditLogs: fullCloud.auditLogs.length > 0 ? fullCloud.auditLogs : prev.auditLogs,
+              setting: fullCloud.setting || prev.setting
+            };
+            saveLocalState(nextState);
+            return nextState;
+          });
+          console.log('[Firestore Sync] Sinkronisasi cloud database selesai!');
+        }
+      } catch (err) {
+        console.error('[Firestore Sync] Gagal menarik data dari serverless Firebase', err);
+      }
+    };
+    fetchCloudDbData();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  // Trigger audit logging dynamically to both local storage state and Firestore cloud
+  const triggerAuditLog = async (user: string, aktivitas: string, detail: string) => {
+    const freshLog = addAuditLog(state, user, aktivitas, detail);
+    setState(prev => ({
+      ...prev,
+      auditLogs: [freshLog, ...prev.auditLogs]
+    }));
+    await saveAuditLogToFirestore(freshLog).catch(err => {
+      console.warn('Gagal menyimpan audit log ke cloud DB:', err);
+    });
+    return freshLog;
+  };
 
   // Active View router
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -332,10 +399,10 @@ export default function App() {
     }
   };
 
-  // --- 1. SAVE WEIGHBRIDGE TICKET (With Instant local storage write + Sync attempt) ---
+  // --- 1. SAVE WEIGHBRIDGE TICKET (With Instant local storage write + Cloud Sync) ---
   const handleSaveTransaction = async (trx: TransaksiTimbang) => {
     // Audit logger before save
-    const audit = addAuditLog(state, state.currentUser?.username || 'operator', 'Simpan Timbangan', `Buat karcis ${trx.id_transaksi} untuk pemasok ${trx.nama_petani} total ${trx.berat_bersih} Kg.`);
+    const audit = await triggerAuditLog(state.currentUser?.username || 'operator', 'Simpan Timbangan', `Buat karcis ${trx.id_transaksi} untuk pemasok ${trx.nama_petani} total ${trx.berat_bersih} Kg.`);
 
     // 1. Instantly update UI and Local Storage with 'pending'
     updateGlobalState(prev => ({
@@ -343,6 +410,9 @@ export default function App() {
       transaksi: [{ ...trx, sync_status: 'pending' }, ...prev.transaksi],
       auditLogs: [{ ...audit, sync_status: 'pending' }, ...prev.auditLogs]
     }));
+
+    // Save to Firestore Cloud
+    await saveTransaksiToFirestore(trx).catch(err => console.error('Cloud trx error', err));
 
     // 2. Perform background network sync without blocking UI
     const token = state.googleToken;
@@ -378,7 +448,7 @@ export default function App() {
 
   // --- 2. UPDATE WEIGHBRIDGE (Calibration edit) ---
   const handleUpdateTransaction = async (updatedTrx: TransaksiTimbang) => {
-    addAuditLog(state, state.currentUser?.username || 'admin', 'Kalibrasi Timbangan', `Kalibrasi karcis ${updatedTrx.id_transaksi} menjadi Netto: ${updatedTrx.berat_bersih} Kg.`);
+    await triggerAuditLog(state.currentUser?.username || 'admin', 'Kalibrasi Timbangan', `Kalibrasi karcis ${updatedTrx.id_transaksi} menjadi Netto: ${updatedTrx.berat_bersih} Kg.`);
 
     updateGlobalState(prev => {
       const idx = prev.transaksi.findIndex(t => t.id_transaksi === updatedTrx.id_transaksi);
@@ -390,6 +460,9 @@ export default function App() {
       return prev;
     });
 
+    // Save to Cloud
+    await saveTransaksiToFirestore(updatedTrx).catch(err => console.error('Cloud trx update error', err));
+
     // Run trigger sync after edit to update changes in Sheets
     setTimeout(() => {
       if (state.googleToken && state.setting.spreadsheet_id) {
@@ -400,12 +473,15 @@ export default function App() {
 
   // --- 3. DELETE TRANSACTION ---
   const handleDeleteTransaction = async (id: string) => {
-    addAuditLog(state, state.currentUser?.username || 'admin', 'Hapus Timbangan', `Hapus karcis timbang ${id} secara permanen.`);
+    await triggerAuditLog(state.currentUser?.username || 'admin', 'Hapus Timbangan', `Hapus karcis timbang ${id} secara permanen.`);
 
     updateGlobalState(prev => ({
       ...prev,
       transaksi: prev.transaksi.filter(t => t.id_transaksi !== id)
     }));
+
+    // Delete from Cloud
+    await deleteTransaksiFromFirestore(id).catch(err => console.error('Cloud trx delete error', err));
 
     // Trigger force overwrite down-sync
     setTimeout(() => {
@@ -417,7 +493,7 @@ export default function App() {
 
   // --- 4. SAVE DAILY PRICES REFERENCE ---
   const handleSavePrice = async (priceRecord: HargaHarian) => {
-    addAuditLog(state, state.currentUser?.username || 'admin', 'Modifikasi Harga', `Atur harga harian untuk ${priceRecord.tanggal}: TBS ${priceRecord.harga_tbs}, Brondolan ${priceRecord.harga_brondolan}`);
+    await triggerAuditLog(state.currentUser?.username || 'admin', 'Modifikasi Harga', `Atur harga harian untuk ${priceRecord.tanggal}: TBS ${priceRecord.harga_tbs}, Brondolan ${priceRecord.harga_brondolan}`);
 
     updateGlobalState(prev => {
       const copy = [...prev.hargaHarian];
@@ -430,6 +506,9 @@ export default function App() {
       return { ...prev, hargaHarian: copy };
     });
 
+    // Save to Cloud
+    await saveHargaToFirestore(priceRecord).catch(err => console.error('Cloud price save error', err));
+
     // Wait a brief delay and trigger sync update
     setTimeout(() => {
       if (state.googleToken && state.setting.spreadsheet_id) {
@@ -440,7 +519,7 @@ export default function App() {
 
   // --- 5. FINANCES: LOG KAS JURNAL ---
   const handleAddKas = async (kasRecord: KasRecord) => {
-    const audit = addAuditLog(state, state.currentUser?.username || 'kasir', 'Log Jurnal Kas', `Buku kas ${kasRecord.jenis} kategori ${kasRecord.kategori} bernilai ${kasRecord.nominal}`);
+    const audit = await triggerAuditLog(state.currentUser?.username || 'kasir', 'Log Jurnal Kas', `Buku kas ${kasRecord.jenis} kategori ${kasRecord.kategori} bernilai ${kasRecord.nominal}`);
 
     // 1. Instantly update UI and Local Storage with 'pending'
     const pendingKasRecord = { ...kasRecord, sync_status: 'pending' as const };
@@ -449,6 +528,9 @@ export default function App() {
       kas: [pendingKasRecord, ...prev.kas],
       auditLogs: [{ ...audit, sync_status: 'pending' }, ...prev.auditLogs]
     }));
+
+    // Save to Cloud
+    await saveKasToFirestore(kasRecord).catch(err => console.error('Cloud kas save error', err));
 
     // 2. Perform background network sync without blocking UI
     const token = state.googleToken;
@@ -482,7 +564,7 @@ export default function App() {
 
   // --- 6. FINANCES: DISPATCH BULK SALES TO COMM MILLS ---
   const handleAddPenjualan = async (penRecord: PenjualanRecord) => {
-    const audit = addAuditLog(state, state.currentUser?.username || 'owner', 'Dispatch Penjualan PKS', `Jual bulk ${penRecord.jenis_sawit} ke ${penRecord.pembeli} (${penRecord.berat} Kg) rata ${penRecord.harga_jual}/Kg`);
+    const audit = await triggerAuditLog(state.currentUser?.username || 'owner', 'Dispatch Penjualan PKS', `Jual bulk ${penRecord.jenis_sawit} ke ${penRecord.pembeli} (${penRecord.berat} Kg) rata ${penRecord.harga_jual}/Kg`);
 
     // 1. Instantly update UI and Local Storage with 'pending'
     const pendingPenRecord = { ...penRecord, sync_status: 'pending' as const };
@@ -491,6 +573,9 @@ export default function App() {
       penjualan: [pendingPenRecord, ...prev.penjualan],
       auditLogs: [{ ...audit, sync_status: 'pending' }, ...prev.auditLogs]
     }));
+
+    // Save to Cloud
+    await savePenjualanToFirestore(penRecord).catch(err => console.error('Cloud penjualan save error', err));
 
     // 2. Perform background network sync without blocking UI
     const token = state.googleToken;
@@ -524,22 +609,28 @@ export default function App() {
 
   // --- 7. GENERAL METADATA LAPAK & SPREADSHEET UPDATE ---
   const handleUpdateSetting = async (updatedSetting: LapakSetting) => {
-    addAuditLog(state, state.currentUser?.username || 'owner', 'Ubah Profil Lapak', 'Memperbarui nama, nomor telephone, and alamat stasiun lapak.');
+    await triggerAuditLog(state.currentUser?.username || 'owner', 'Ubah Profil Lapak', 'Memperbarui nama, nomor telephone, and alamat stasiun lapak.');
 
     updateGlobalState(prev => ({
       ...prev,
       setting: updatedSetting
     }));
+
+    // Save to Cloud
+    await saveSettingToFirestore(updatedSetting).catch(err => console.error('Cloud settings error', err));
   };
 
   // --- 8. REGISTER NEW USER ACCOUNT ---
   const handleAddUser = async (newUser: UserAccount) => {
-    addAuditLog(state, state.currentUser?.username || 'owner', 'Tambah Karyawan', `Mendaftarkan karyawan baru ${newUser.nama} sebagai ${newUser.role}`);
+    await triggerAuditLog(state.currentUser?.username || 'developer', 'Tambah Karyawan', `Mendaftarkan karyawan baru ${newUser.nama} sebagai ${newUser.role}`);
 
     updateGlobalState(prev => ({
       ...prev,
       users: [...prev.users, newUser]
     }));
+
+    // Save to Cloud
+    await saveUserToFirestore(newUser).catch(err => console.error('Cloud user add error', err));
 
     // Trigger sync overwriter to push users list changes onto main spreadsheet USERS worksheet
     setTimeout(() => {
@@ -551,16 +642,22 @@ export default function App() {
 
   // --- 9. FREEZE/UNFREEZE USER ACCOUNT ---
   const handleToggleUserStatus = async (userId: string) => {
+    let savedU: UserAccount | null = null;
     updateGlobalState(prev => {
       const copy = [...prev.users];
       const idx = copy.findIndex(u => u.user_id === userId);
       if (idx !== -1) {
         const targetStatus = copy[idx].status === 'Aktif' ? 'Nonaktif' : 'Aktif';
         copy[idx] = { ...copy[idx], status: targetStatus };
-        addAuditLog(state, state.currentUser?.username || 'owner', 'Ubah Akses Karyawan', `Merubah status akun ${copy[idx].nama} menjadi ${targetStatus}`);
+        savedU = copy[idx];
+        addAuditLog(state, state.currentUser?.username || 'developer', 'Ubah Akses Karyawan', `Merubah status akun ${copy[idx].nama} menjadi ${targetStatus}`);
       }
       return { ...prev, users: copy };
     });
+
+    if (savedU) {
+      await saveUserToFirestore(savedU).catch(err => console.error('Cloud user toggle error', err));
+    }
 
     // Sycn
     setTimeout(() => {
@@ -572,11 +669,15 @@ export default function App() {
 
   // --- 9b. UPDATE EXISTING USER ACCOUNT ---
   const handleUpdateUser = async (updatedUser: UserAccount) => {
-    addAuditLog(state, state.currentUser?.username || 'owner', 'Ubah Karyawan', `Mengubah informasi akun karyawan ${updatedUser.nama}`);
+    await triggerAuditLog(state.currentUser?.username || 'developer', 'Ubah Karyawan', `Mengubah informasi akun karyawan ${updatedUser.nama}`);
     updateGlobalState(prev => {
       const copy = prev.users.map(u => u.user_id === updatedUser.user_id ? updatedUser : u);
       return { ...prev, users: copy };
     });
+
+    // Save to Cloud
+    await saveUserToFirestore(updatedUser).catch(err => console.error('Cloud user edit error', err));
+
     setTimeout(() => {
       if (state.googleToken && state.setting.spreadsheet_id) {
         handleForceSync();
@@ -588,16 +689,81 @@ export default function App() {
   const handleDeleteUser = async (userId: string) => {
     const target = state.users.find(u => u.user_id === userId);
     if (!target) return;
-    addAuditLog(state, state.currentUser?.username || 'owner', 'Hapus Karyawan', `Menghapus akun karyawan ${target.nama}`);
+    await triggerAuditLog(state.currentUser?.username || 'developer', 'Hapus Karyawan', `Menghapus akun karyawan ${target.nama}`);
     updateGlobalState(prev => {
       const copy = prev.users.filter(u => u.user_id !== userId);
       return { ...prev, users: copy };
     });
+
+    // Delete from Cloud
+    await deleteUserFromFirestore(userId).catch(err => console.error('Cloud user delete error', err));
+
     setTimeout(() => {
       if (state.googleToken && state.setting.spreadsheet_id) {
         handleForceSync();
       }
     }, 450);
+  };
+
+  // --- MASTER MENU: ADD CUSTOM ROLE ---
+  const handleAddRole = async (roleName: string, menus: string[] = []) => {
+    await triggerAuditLog(state.currentUser?.username || 'developer', 'Tambah Peran', `Membuat custom role baru: "${roleName}" dengan menu: ${menus.join(', ')}`);
+    updateGlobalState(prev => {
+      const copy = [...prev.roles];
+      if (!copy.includes(roleName)) {
+        copy.push(roleName);
+      }
+      const configs = prev.roleConfigs ? [...prev.roleConfigs] : [];
+      const roleId = 'id-' + roleName.toLowerCase().replace(/\s+/g, '-');
+      const existingIdx = configs.findIndex(c => c.id === roleId || c.role_name === roleName);
+      if (existingIdx > -1) {
+        configs[existingIdx] = { id: roleId, role_name: roleName, menus };
+      } else {
+        configs.push({ id: roleId, role_name: roleName, menus });
+      }
+      return { ...prev, roles: copy, roleConfigs: configs };
+    });
+    await saveRoleToFirestore(roleName, menus).catch(err => console.error('Cloud add role error', err));
+  };
+
+  const handleUpdateRole = async (roleId: string, newRoleName: string, menus: string[]) => {
+    await triggerAuditLog(state.currentUser?.username || 'developer', 'Ubah Peran', `Mengubah custom role "${roleId}" menjadi "${newRoleName}" dengan menu: ${menus.join(', ')}`);
+    
+    let oldRoleName = '';
+    let dbUpdateNeeded = false;
+    
+    updateGlobalState(prev => {
+      const configs = prev.roleConfigs ? [...prev.roleConfigs] : [];
+      const idx = configs.findIndex(c => c.id === roleId);
+      if (idx > -1) {
+        oldRoleName = configs[idx].role_name;
+        configs[idx] = { ...configs[idx], role_name: newRoleName, menus };
+        dbUpdateNeeded = true;
+      }
+      
+      const updatedRoles = prev.roles.map(r => r === oldRoleName ? newRoleName : r);
+      const updatedUsers = prev.users.map(u => u.role === oldRoleName ? { ...u, role: newRoleName as any } : u);
+      
+      return { ...prev, roles: updatedRoles, roleConfigs: configs, users: updatedUsers };
+    });
+
+    if (dbUpdateNeeded) {
+      if (oldRoleName && oldRoleName.trim() !== newRoleName.trim()) {
+        await deleteRoleFromFirestore(oldRoleName).catch(err => console.error('Cloud remove old role error', err));
+      }
+      await saveRoleToFirestore(newRoleName, menus).catch(err => console.error('Cloud update role error', err));
+    }
+  };
+
+  // --- MASTER MENU: DELETE CUSTOM ROLE ---
+  const handleDeleteRole = async (roleName: string) => {
+    await triggerAuditLog(state.currentUser?.username || 'developer', 'Hapus Peran', `Menghapus custom role: "${roleName}"`);
+    updateGlobalState(prev => ({
+      ...prev,
+      roles: prev.roles.filter(r => r !== roleName),
+      roleConfigs: (prev.roleConfigs || []).filter(c => c.role_name !== roleName)
+    }));
+    await deleteRoleFromFirestore(roleName).catch(err => console.error('Cloud remove role error', err));
   };
 
   // --- 10. SYSTEM AUTH LOGOUT (Keluaran dari gerbang utama) ---
@@ -643,6 +809,43 @@ Operator: ${trx.operator}`;
     updateGlobalState(prev => ({ ...prev, theme: prev.theme === 'light' ? 'dark' : 'light' }));
   };
 
+  // Helper to determine if current user role has access to specific tab
+  const hasAccessToTab = (tab: string): boolean => {
+    const role = state.currentUser?.role;
+    if (!role) return false;
+    
+    // Developer automatically gets access to everything
+    if (role === 'Developer' || state.currentUser?.username === 'developer') {
+      return true;
+    }
+    
+    // Check if custom config exists
+    const config = state.roleConfigs?.find(c => c.role_name === role);
+    if (config) {
+      return config.menus.includes(tab);
+    }
+    
+    // Fallback to default system permissions
+    // dashboard, harga, riwayat, pengaturan are default-open for everyone
+    if (['dashboard', 'harga', 'riwayat', 'pengaturan'].includes(tab)) {
+      return true;
+    }
+    
+    if (tab === 'timbang') {
+      return role !== 'Kasir';
+    }
+    
+    if (tab === 'laporan' || tab === 'kas') {
+      return role !== 'Operator Timbangan';
+    }
+    
+    if (tab === 'master') {
+      return false;
+    }
+    
+    return false;
+  };
+
   // Guard: require credentials login gateway first
   if (!state.currentUser) {
     return (
@@ -653,6 +856,7 @@ Operator: ${trx.operator}`;
           addAuditLog(state, user.username, 'Sistem Login', `Berhasl masuk sebagai ${user.role}.`);
         }} 
         lapakName={state.setting.nama_lapak || 'Lapak Sawit Riau'} 
+        syncError={firestoreSyncError}
       />
     );
   }
@@ -663,10 +867,13 @@ Operator: ${trx.operator}`;
       case 'dashboard':
         return <Dashboard state={state} setActiveTab={setActiveTab} />;
       case 'timbang':
+        if (!hasAccessToTab('timbang')) return <Dashboard state={state} setActiveTab={setActiveTab} />;
         return <TransaksiTimbangView state={state} onSave={handleSaveTransaction} />;
       case 'harga':
+        if (!hasAccessToTab('harga')) return <Dashboard state={state} setActiveTab={setActiveTab} />;
         return <HargaHarianView state={state} onSavePrice={handleSavePrice} />;
       case 'riwayat':
+        if (!hasAccessToTab('riwayat')) return <Dashboard state={state} setActiveTab={setActiveTab} />;
         return (
           <RiwayatTransaksiView 
             state={state} 
@@ -676,34 +883,36 @@ Operator: ${trx.operator}`;
           />
         );
       case 'laporan':
+        if (!hasAccessToTab('laporan')) return <Dashboard state={state} setActiveTab={setActiveTab} />;
         return <LaporanView state={state} />;
       case 'kas':
+        if (!hasAccessToTab('kas')) return <Dashboard state={state} setActiveTab={setActiveTab} />;
         return <KasView state={state} onAddKas={handleAddKas} onAddPenjualan={handleAddPenjualan} />;
       case 'pengaturan':
+        if (!hasAccessToTab('pengaturan')) return <Dashboard state={state} setActiveTab={setActiveTab} />;
         return (
           <PengaturanView 
             state={state} 
             onUpdateSetting={handleUpdateSetting} 
-            onAddUser={handleAddUser}
-            onToggleUserStatus={handleToggleUserStatus}
-            onUpdateUser={handleUpdateUser}
-            onDeleteUser={handleDeleteUser}
           />
         );
-      case 'sheets':
-        if (state.currentUser?.role === 'Owner') {
+      case 'master':
+        if (state.currentUser?.role === 'Developer' || state.currentUser?.username === 'developer') {
           return (
-            <KonektivitasSheetsView
+            <MasterManagerView
               state={state}
-              onUpdateSetting={handleUpdateSetting}
-              onForceSync={handleForceSync}
-              onPullSync={handlePullSync}
-              onSignInGoogle={handleSignInGoogle}
-              onSignOutGoogle={handleSignOutGoogle}
+              onAddUser={handleAddUser}
+              onToggleUserStatus={handleToggleUserStatus}
+              onUpdateUser={handleUpdateUser}
+              onDeleteUser={handleDeleteUser}
+              onAddRole={handleAddRole}
+              onUpdateRole={handleUpdateRole}
+              onDeleteRole={handleDeleteRole}
             />
           );
         }
         return <Dashboard state={state} setActiveTab={setActiveTab} />;
+
       default:
         return <Dashboard state={state} setActiveTab={setActiveTab} />;
     }
@@ -768,18 +977,19 @@ Operator: ${trx.operator}`;
                 </span>
               </div>
             </div>
- 
             {/* Menu options mapped with granular permission controls */}
             <nav className="space-y-1 flex flex-col" id="nav-group">
-              <button
-                onClick={() => { setActiveTab('dashboard'); setSidebarOpen(false); }}
-                className={`w-full py-3 px-4 rounded-xl text-xs font-bold text-left flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'dashboard' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-zinc-600 hover:bg-emerald-50 hover:text-emerald-700'}`}
-              >
-                <LayoutDashboard size={15} />
-                <span>Dashboard</span>
-              </button>
+              {hasAccessToTab('dashboard') && (
+                <button
+                  onClick={() => { setActiveTab('dashboard'); setSidebarOpen(false); }}
+                  className={`w-full py-3 px-4 rounded-xl text-xs font-bold text-left flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'dashboard' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-zinc-600 hover:bg-emerald-50 hover:text-emerald-700'}`}
+                >
+                  <LayoutDashboard size={15} />
+                  <span>Dashboard</span>
+                </button>
+              )}
  
-              {state.currentUser.role !== 'Kasir' && (
+              {hasAccessToTab('timbang') && (
                 <button
                   onClick={() => { setActiveTab('timbang'); setSidebarOpen(false); }}
                   className={`w-full py-3 px-4 rounded-xl text-xs font-bold text-left flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'timbang' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-zinc-600 hover:bg-emerald-50 hover:text-emerald-700'}`}
@@ -789,94 +999,70 @@ Operator: ${trx.operator}`;
                 </button>
               )}
  
-              <button
-                onClick={() => { setActiveTab('harga'); setSidebarOpen(false); }}
-                className={`w-full py-3 px-4 rounded-xl text-xs font-bold text-left flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'harga' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-zinc-600 hover:bg-emerald-50 hover:text-emerald-700'}`}
-              >
-                <Tags size={15} />
-                <span>Harga Harian</span>
-              </button>
- 
-              <button
-                onClick={() => { setActiveTab('riwayat'); setSidebarOpen(false); }}
-                className={`w-full py-3 px-4 rounded-xl text-xs font-bold text-left flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'riwayat' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-zinc-600 hover:bg-emerald-50 hover:text-emerald-700'}`}
-              >
-                <History size={15} />
-                <span>Riwayat & Laporan</span>
-              </button>
- 
-              {state.currentUser.role !== 'Operator Timbangan' && (
-                <>
-                  <button
-                    onClick={() => { setActiveTab('laporan'); setSidebarOpen(false); }}
-                    className={`w-full py-3 px-4 rounded-xl text-xs font-bold text-left flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'laporan' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-zinc-600 hover:bg-emerald-50 hover:text-emerald-700'}`}
-                  >
-                    <FileText size={15} />
-                    <span>Laporan Periodik</span>
-                  </button>
- 
-                  <button
-                    onClick={() => { setActiveTab('kas'); setSidebarOpen(false); }}
-                    className={`w-full py-3 px-4 rounded-xl text-xs font-bold text-left flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'kas' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-zinc-600 hover:bg-emerald-50 hover:text-emerald-700'}`}
-                  >
-                    <Coins size={15} />
-                    <span>Kas Operasional</span>
-                  </button>
-                </>
-              )}
- 
-              {state.currentUser.role === 'Owner' && (
+              {hasAccessToTab('harga') && (
                 <button
-                  onClick={() => { setActiveTab('sheets'); setSidebarOpen(false); }}
-                  className={`w-full py-3 px-4 rounded-xl text-xs font-bold text-left flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'sheets' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-zinc-600 hover:bg-emerald-50 hover:text-emerald-700'}`}
+                  onClick={() => { setActiveTab('harga'); setSidebarOpen(false); }}
+                  className={`w-full py-3 px-4 rounded-xl text-xs font-bold text-left flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'harga' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-zinc-600 hover:bg-emerald-50 hover:text-emerald-700'}`}
                 >
-                  <Database size={15} />
-                  <span>Konektivitas Sheets</span>
+                  <Tags size={15} />
+                  <span>Harga Harian</span>
                 </button>
               )}
-
-              <button
-                onClick={() => { setActiveTab('pengaturan'); setSidebarOpen(false); }}
-                className={`w-full py-3 px-4 rounded-xl text-xs font-bold text-left flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'pengaturan' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-zinc-600 hover:bg-emerald-50 hover:text-emerald-700'}`}
-              >
-                <Settings size={15} />
-                <span>Pengaturan Lapak</span>
-              </button>
+ 
+              {hasAccessToTab('riwayat') && (
+                <button
+                  onClick={() => { setActiveTab('riwayat'); setSidebarOpen(false); }}
+                  className={`w-full py-3 px-4 rounded-xl text-xs font-bold text-left flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'riwayat' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-zinc-600 hover:bg-emerald-50 hover:text-emerald-700'}`}
+                >
+                  <History size={15} />
+                  <span>Riwayat & Laporan</span>
+                </button>
+              )}
+ 
+              {hasAccessToTab('laporan') && (
+                <button
+                  onClick={() => { setActiveTab('laporan'); setSidebarOpen(false); }}
+                  className={`w-full py-3 px-4 rounded-xl text-xs font-bold text-left flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'laporan' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-zinc-600 hover:bg-emerald-50 hover:text-emerald-700'}`}
+                >
+                  <FileText size={15} />
+                  <span>Laporan Periodik</span>
+                </button>
+              )}
+ 
+              {hasAccessToTab('kas') && (
+                <button
+                  onClick={() => { setActiveTab('kas'); setSidebarOpen(false); }}
+                  className={`w-full py-3 px-4 rounded-xl text-xs font-bold text-left flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'kas' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-zinc-600 hover:bg-emerald-50 hover:text-emerald-700'}`}
+                >
+                  <Coins size={15} />
+                  <span>Kas Operasional</span>
+                </button>
+              )}
+ 
+              {(state.currentUser?.role === 'Developer' || state.currentUser?.username === 'developer') && (
+                <button
+                  onClick={() => { setActiveTab('master'); setSidebarOpen(false); }}
+                  className={`w-full py-3 px-4 rounded-xl text-xs font-bold text-left flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'master' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-zinc-600 hover:bg-emerald-50 hover:text-emerald-700'}`}
+                >
+                  <ShieldCheck size={15} />
+                  <span>Menu Master</span>
+                </button>
+              )}
+ 
+              {hasAccessToTab('pengaturan') && (
+                <button
+                  onClick={() => { setActiveTab('pengaturan'); setSidebarOpen(false); }}
+                  className={`w-full py-3 px-4 rounded-xl text-xs font-bold text-left flex items-center gap-3 transition-all cursor-pointer ${activeTab === 'pengaturan' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/15' : 'text-zinc-600 hover:bg-emerald-50 hover:text-emerald-700'}`}
+                >
+                  <Settings size={15} />
+                  <span>Pengaturan Lapak</span>
+                </button>
+              )}
             </nav>
           </div>
  
           {/* User sign out foot area links and background queue indicators */}
-          <div className="space-y-3 pt-4 border-t border-gray-150">
-            {/* Background queue indicator banner */}
-            {totalPending > 0 && (
-              <div className="text-[11px] p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 shrink-0 text-xs font-bold">
-                  <RefreshCw size={11} className={state.isSyncing ? 'animate-spin' : ''} />
-                  <span>{totalPending} data antre sync</span>
-                </span>
-                <span className="text-[9px] px-1.5 py-0.5 bg-amber-200 text-amber-900 rounded-md font-extrabold uppercase shrink-0">
-                  {state.isSyncing ? 'SYNC' : 'PENDING'}
-                </span>
-              </div>
-            )}
-            {totalPending === 0 && state.googleToken && state.setting.spreadsheet_id && (
-              <div className="text-[11px] p-2.5 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-850 flex items-center gap-1.5 font-semibold">
-                <Cloud size={12} className="shrink-0 text-emerald-600" />
-                <span>Semua data terbarukan</span>
-              </div>
-            )}
- 
-            <div className="flex items-center justify-between text-xs text-zinc-500 font-semibold">
-              <span className="flex items-center gap-1.5 text-emerald-700"><Clock size={12} /> {state.isOnline ? 'ONLINE' : 'OFFLINE'}</span>
-              <button 
-                onClick={toggleTheme}
-                className="p-1 px-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 cursor-pointer text-[10px] font-bold flex items-center gap-1"
-                title="Ganti Tema Visual"
-              >
-                Toggle UI
-              </button>
-            </div>
- 
+          <div className="pt-4 border-t border-gray-150">
             <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-200 flex items-center justify-between text-xs space-y-1 overflow-hidden shrink-0">
               <div className="truncate max-w-[140px]">
                 <h5 className="font-bold text-zinc-905 truncate leading-none mb-1">@{state.currentUser.nama}</h5>
