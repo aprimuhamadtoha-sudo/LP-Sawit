@@ -33,8 +33,8 @@ export default function HargaHarianView({ state, onSavePrice }: HargaHarianProps
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Determine authorized roles
-  const canModify = currentUser?.role === 'Admin' || currentUser?.role === 'Owner' || currentUser?.role === 'Developer';
+  // Determine authorized roles (Access is now open to all logged-in staffs as requested)
+  const canModify = true;
 
   // Sort prices by date descending
   const sortedPrices = [...hargaHarian].sort((a, b) => b.tanggal.localeCompare(a.tanggal));
@@ -118,7 +118,7 @@ export default function HargaHarianView({ state, onSavePrice }: HargaHarianProps
           {canModify ? (
             <div className="px-3.5 py-1.5 bg-slate-100 text-slate-800 rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-slate-200">
               <ShieldCheck size={14} className="text-slate-600" />
-              <span>Akses Terbuka: Administrator / Owner</span>
+              <span>Akses Terbuka: Semua Staff & Operator</span>
             </div>
           ) : (
             <div className="px-3.5 py-1.5 bg-amber-50 text-amber-800 rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-amber-100">

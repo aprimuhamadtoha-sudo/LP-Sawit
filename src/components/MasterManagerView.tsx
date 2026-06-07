@@ -74,6 +74,49 @@ export default function MasterManagerView({
   const [formSuccess, setFormSuccess] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
+  // Custom Confirmation Modal state
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    isAlert?: boolean;
+    type?: 'danger' | 'warning' | 'info';
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
+
+  const showAlert = (title: string, message: string, type: 'danger' | 'warning' | 'info' = 'info') => {
+    setConfirmModal({
+      isOpen: true,
+      title,
+      message,
+      isAlert: true,
+      confirmText: 'OK',
+      type,
+      onConfirm: () => setConfirmModal(null)
+    });
+  };
+
+  const showConfirm = (
+    title: string,
+    message: string,
+    onConfirm: () => void | Promise<void>,
+    type: 'danger' | 'warning' | 'info' = 'warning',
+    confirmText = 'Ya, Lanjutkan',
+    cancelText = 'Batal'
+  ) => {
+    setConfirmModal({
+      isOpen: true,
+      title,
+      message,
+      confirmText,
+      cancelText,
+      type,
+      onConfirm
+    });
+  };
+
   // Security Verification (Developer username is checked)
   const isDeveloper = state.currentUser?.role === 'Developer' || state.currentUser?.username === 'developer';
 
@@ -139,7 +182,7 @@ export default function MasterManagerView({
     if (!editingUser) return;
 
     if (!editNama.trim() || !editUsername.trim() || !editPassword.trim()) {
-      alert('Semua field wajib diisi!');
+      showAlert('Input Tidak Lengkap', 'Semua field wajib diisi!', 'warning');
       return;
     }
 
@@ -157,7 +200,7 @@ export default function MasterManagerView({
       setEditingUser(null);
       setFormSuccess(`Informasi karyawan @${editUsername} berhasil diubah!`);
     } catch (err: any) {
-      alert(`Gagal mengubah informasi user: ${err.message || err}`);
+      showAlert('Gagal Mengubah', `Gagal mengubah informasi user: ${err.message || err}`, 'danger');
     } finally {
       setActionLoading(false);
     }
@@ -166,39 +209,46 @@ export default function MasterManagerView({
   // --- TOGGLE BANNED/ACTIVE ---
   const handleToggleUser = async (u: UserAccount) => {
     if (u.user_id === state.currentUser?.user_id) {
-      alert('Anda tidak bisa membekukan akun yang sedang digunakan saat ini!');
+      showAlert('Aksi Ditolak', 'Anda tidak bisa membekukan akun yang sedang digunakan saat ini!', 'danger');
       return;
     }
 
-    const confirmToggle = window.confirm(
-      `Apakah Anda yakin ingin ${u.status === 'Aktif' ? 'Menonaktifkan' : 'Mengaktifkan'} akun ${u.nama}?`
+    showConfirm(
+      'Konfirmasi Perubahan Status',
+      `Apakah Anda yakin ingin ${u.status === 'Aktif' ? 'Menonaktifkan' : 'Mengaktifkan'} akun karyawan ${u.nama}?`,
+      async () => {
+        try {
+          await onToggleUserStatus(u.user_id);
+          setConfirmModal(null);
+          setFormSuccess(`Status akun ${u.nama} berhasil diubah.`);
+        } catch (err: any) {
+          showAlert('Gagal Mengubah Status', `Gagal memproses status: ${err.message || err}`, 'danger');
+        }
+      },
+      'warning'
     );
-
-    if (confirmToggle) {
-      try {
-        await onToggleUserStatus(u.user_id);
-      } catch (err: any) {
-        alert(`Gagal memproses perubahan status: ${err.message || err}`);
-      }
-    }
   };
 
   // --- HARD DELETE USER ---
   const handleDeleteUserClick = async (userId: string, nama: string) => {
-    const confirmDelete = window.confirm(
-      `HAPUS PERMANEN akun karyawan ${nama}?\nTindakan pengembang ini bersifat mutlak.`
+    showConfirm(
+      'Hapus Permanen Akun',
+      `Apakah Anda yakin ingin menghapus permanen akun karyawan ${nama}?\nTindakan pengembang ini bersifat mutlak dan data akun akan terhapus selamanya.`,
+      async () => {
+        setActionLoading(true);
+        try {
+          await onDeleteUser(userId);
+          setFormSuccess(`Akun karyawan ${nama} telah dihapus total.`);
+          setConfirmModal(null);
+        } catch (err: any) {
+          showAlert('Gagal Menghapus', `Gagal menghapus user: ${err.message || err}`, 'danger');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+      'danger',
+      'Hapus Permanen'
     );
-    if (!confirmDelete) return;
-
-    setActionLoading(true);
-    try {
-      await onDeleteUser(userId);
-      setFormSuccess(`Akun karyawan ${nama} telah dihapus total.`);
-    } catch (err: any) {
-      alert(`Gagal menghapus user: ${err.message || err}`);
-    } finally {
-      setActionLoading(false);
-    }
   };
 
   // --- ADD ROLE ---
@@ -232,22 +282,28 @@ export default function MasterManagerView({
   const handleDeleteRoleClick = async (r: string) => {
     const isSystemRole = ['Owner', 'Admin', 'Operator Timbangan', 'Kasir', 'Developer'].includes(r);
     if (isSystemRole) {
-      alert('Role sistem bawaan tidak boleh dihapus untuk ketahanan database!');
+      showAlert('Aksi Ditolak', 'Role sistem bawaan tidak boleh dihapus untuk ketahanan database!', 'danger');
       return;
     }
 
-    const confirmDel = window.confirm(`Apakah Anda yakin ingin menghapus role "${r}"? Karyawan dengan role ini mungkin perlu disesuaikan kembali.`);
-    if (!confirmDel) return;
-
-    setActionLoading(true);
-    try {
-      await onDeleteRole(r);
-      setFormSuccess(`Role "${r}" berhasil dihapus.`);
-    } catch (err: any) {
-      alert(`Gagal menghapus role: ${err.message || err}`);
-    } finally {
-      setActionLoading(false);
-    }
+    showConfirm(
+      'Hapus Peran',
+      `Apakah Anda yakin ingin menghapus role "${r}"? Karyawan dengan role ini mungkin perlu disesuaikan kembali jabatannya.`,
+      async () => {
+        setActionLoading(true);
+        try {
+          await onDeleteRole(r);
+          setFormSuccess(`Role "${r}" berhasil dihapus.`);
+          setConfirmModal(null);
+        } catch (err: any) {
+          showAlert('Gagal Menghapus', `Gagal menghapus role: ${err.message || err}`, 'danger');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+      'danger',
+      'Hapus Peran'
+    );
   };
 
   const handleSaveEditRole = async (e: React.FormEvent) => {
@@ -255,7 +311,7 @@ export default function MasterManagerView({
     if (!editingRole || !onUpdateRole) return;
 
     if (!editRoleName.trim()) {
-      alert('Nama peran tidak boleh kosong!');
+      showAlert('Input Kurang Lengkap', 'Nama peran tidak boleh kosong!', 'warning');
       return;
     }
 
@@ -265,7 +321,7 @@ export default function MasterManagerView({
       setEditingRole(null);
       setFormSuccess(`Berhasil memperbarui peran "${editRoleName.trim()}"!`);
     } catch (err: any) {
-      alert(`Gagal memperbarui peran: ${err.message || err}`);
+      showAlert('Gagal Memperbarui', `Gagal memperbarui peran: ${err.message || err}`, 'danger');
     } finally {
       setActionLoading(false);
     }
@@ -720,6 +776,54 @@ export default function MasterManagerView({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- CUSTOM CONFIRMATION & ALERT MODAL --- */}
+      {confirmModal && confirmModal.isOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-[9999]">
+          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden border border-zinc-150 shadow-2xl animate-scaleIn">
+            <div className={`p-4 text-white flex items-center gap-2 font-bold text-sm ${
+              confirmModal.type === 'danger' ? 'bg-red-600' :
+              confirmModal.type === 'warning' ? 'bg-amber-500' :
+              'bg-emerald-600'
+            }`}>
+              <ShieldCheck size={16} />
+              <span>{confirmModal.title}</span>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs font-semibold text-gray-700 leading-relaxed whitespace-pre-line">
+                {confirmModal.message}
+              </p>
+
+              <div className="flex gap-2.5 pt-2">
+                {!confirmModal.isAlert && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmModal(null)}
+                    className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-center text-xs cursor-pointer transition-colors"
+                  >
+                    {confirmModal.cancelText || 'Batal'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cb = confirmModal.onConfirm;
+                    cb();
+                  }}
+                  className={`flex-1 py-2 text-white font-bold rounded-xl text-center text-xs cursor-pointer transition-colors ${
+                    confirmModal.type === 'danger' ? 'bg-red-600 hover:bg-red-700' :
+                    confirmModal.type === 'warning' ? 'bg-amber-600 hover:bg-amber-700' :
+                    'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
+                >
+                  {confirmModal.confirmText || 'Ya, Lanjutkan'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

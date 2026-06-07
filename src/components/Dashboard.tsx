@@ -444,10 +444,10 @@ export default function Dashboard({ state, setActiveTab }: DashboardProps) {
         </div>
       </div>
  
-      {/* --- SECTION 4: GRAFIK BULANAN & AKTIVITAS AUDIT TERKINI --- */}
+      {/* --- SECTION 4: GRAFIK BULANAN --- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" id="dashboard-bottom-section">
         {/* Graphic 3: Grafik Tonase Bulanan (6 Bulan Terakhir) */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm lg:col-span-2">
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm lg:col-span-3">
           <div>
             <h4 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Grafik Tonase Bulanan</h4>
             <p className="text-slate-400 text-[11px]">Perkembangan volume timbangan Sourced (Kg) dalam beberapa bulan terakhir</p>
@@ -483,38 +483,6 @@ export default function Dashboard({ state, setActiveTab }: DashboardProps) {
               );
             })}
           </div>
-        </div>
- 
-        {/* Latest Activity Log List */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between">
-          <div>
-            <h4 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Log Aktivitas Terbaru</h4>
-            <p className="text-slate-400 text-[11px]">Audit aktivitas timbangan & kas hari ini</p>
-          </div>
- 
-          <div className="mt-4 flex-1 space-y-3 overflow-y-auto max-h-52 pr-1" id="audit-logs-list">
-            {state.auditLogs.slice(0, 5).map((log, index) => (
-              <div key={log.id_log ? `${log.id_log}-${index}` : `log-${index}`} className="p-3 bg-slate-50 border border-slate-100/50 rounded-xl text-xs space-y-1 hover:bg-slate-100/70 transition-colors">
-                <div className="flex items-center justify-between text-[10px]">
-                  <span className="font-bold text-slate-600">@{log.user}</span>
-                  <span className="text-slate-450 font-mono">{log.tanggal}</span>
-                </div>
-                <div className="font-bold text-slate-800">{log.aktivitas}</div>
-                <div className="text-slate-500 leading-normal text-[11px]">{log.detail}</div>
-              </div>
-            ))}
-            {state.auditLogs.length === 0 && (
-              <div className="text-center py-8 text-slate-400 text-xs font-bold">Belum ada aktivitas tercatat.</div>
-            )}
-          </div>
- 
-          <button
-            onClick={() => setActiveTab('pengaturan')}
-            className="w-full mt-4 py-3 text-center text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200/80 border border-slate-200/50 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer"
-          >
-            <span>Selengkapnya di Pengaturan</span>
-            <ChevronRight size={14} />
-          </button>
         </div>
       </div>
     </div>

@@ -70,6 +70,42 @@ export default function App() {
   // Global Application State loading from cache or Defaults
   const [state, setState] = useState<AppState>(() => loadLocalState());
   const [firestoreSyncError, setFirestoreSyncError] = useState<string | null>(null);
+  const [isSyncingFirestore, setIsSyncingFirestore] = useState(false);
+
+  const handleReloadFromFirestore = async () => {
+    setIsSyncingFirestore(true);
+    try {
+      console.log('[Manual Firestore Sync] Mengambil snapshots data teranyar...');
+      const fullCloud = await pullAllDataFromFirestore();
+      if (fullCloud.syncError) {
+        setFirestoreSyncError(fullCloud.syncError);
+      } else {
+        setFirestoreSyncError(null);
+      }
+      setState(prev => {
+        const nextState = {
+          ...prev,
+          users: fullCloud.users.length > 0 ? fullCloud.users : prev.users,
+          roles: fullCloud.roles.length > 0 ? fullCloud.roles : prev.roles,
+          roleConfigs: fullCloud.roleConfigs && fullCloud.roleConfigs.length > 0 ? fullCloud.roleConfigs : prev.roleConfigs,
+          hargaHarian: fullCloud.hargaHarian.length > 0 ? fullCloud.hargaHarian : prev.hargaHarian,
+          transaksi: fullCloud.transaksi.length > 0 ? fullCloud.transaksi : prev.transaksi,
+          kas: fullCloud.kas.length > 0 ? fullCloud.kas : prev.kas,
+          penjualan: fullCloud.penjualan.length > 0 ? fullCloud.penjualan : prev.penjualan,
+          auditLogs: fullCloud.auditLogs.length > 0 ? fullCloud.auditLogs : prev.auditLogs,
+          setting: fullCloud.setting || prev.setting
+        };
+        saveLocalState(nextState);
+        return nextState;
+      });
+      alert('Sinkronisasi Berhasil!\npulled data terbaru dari database Cloud Firestore.');
+    } catch (err: any) {
+      console.error('[Manual Firestore Sync] Gagal sinkronisasi data', err);
+      alert('Gagal menyinkronkan data dengan database: ' + (err.message || err));
+    } finally {
+      setIsSyncingFirestore(false);
+    }
+  };
 
   // Synchronously load database documents from Cloud Firestore upon initialization
   useEffect(() => {
@@ -87,6 +123,7 @@ export default function App() {
               ...prev,
               users: fullCloud.users.length > 0 ? fullCloud.users : prev.users,
               roles: fullCloud.roles.length > 0 ? fullCloud.roles : prev.roles,
+              roleConfigs: fullCloud.roleConfigs && fullCloud.roleConfigs.length > 0 ? fullCloud.roleConfigs : prev.roleConfigs,
               hargaHarian: fullCloud.hargaHarian.length > 0 ? fullCloud.hargaHarian : prev.hargaHarian,
               transaksi: fullCloud.transaksi.length > 0 ? fullCloud.transaksi : prev.transaksi,
               kas: fullCloud.kas.length > 0 ? fullCloud.kas : prev.kas,
@@ -1061,6 +1098,22 @@ Operator: ${trx.operator}`;
             </nav>
           </div>
  
+          {/* Manual Database Real-time Synchronizer */}
+          <div className="px-1">
+            <button
+              onClick={handleReloadFromFirestore}
+              disabled={isSyncingFirestore}
+              className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all cursor-pointer ${
+                isSyncingFirestore 
+                  ? 'bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed' 
+                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200/50 shadow-xs'
+              }`}
+            >
+              <RefreshCw size={13} className={isSyncingFirestore ? 'animate-spin text-emerald-600' : 'text-emerald-700'} />
+              <span>{isSyncingFirestore ? 'Menyinkronkan...' : 'Sinkronkan Database'}</span>
+            </button>
+          </div>
+
           {/* User sign out foot area links and background queue indicators */}
           <div className="pt-4 border-t border-gray-150">
             <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-200 flex items-center justify-between text-xs space-y-1 overflow-hidden shrink-0">
