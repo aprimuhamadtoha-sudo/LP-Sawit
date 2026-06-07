@@ -184,31 +184,7 @@ export default function App() {
     };
   }, []);
 
-  // Background Auto-Sync Queue effect: runs when going online, or after loading
-  useEffect(() => {
-    if (!state.isOnline || !state.googleToken || !state.setting.spreadsheet_id || totalPending === 0 || state.isSyncing) {
-      return;
-    }
-
-    console.log(`[Background Sync Queue] Terdeteksi ${totalPending} data belum sinkron. Menjalankan retry otomatis...`);
-    const timer = setTimeout(() => {
-      handleForceSync(true); // run silently
-    }, 1500);
-
-    return () => clearTimeout(timer);
-  }, [state.isOnline, totalPending, state.googleToken, state.setting.spreadsheet_id, state.isSyncing]);
-
-  // Periodic Background Poller Retry (every 25 seconds if unsynced data remains outstanding)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (state.isOnline && state.googleToken && state.setting.spreadsheet_id && totalPending > 0 && !state.isSyncing) {
-        console.log('[Background Sync Queue] Polling sinkronisasi ritmik otomatis...');
-        handleForceSync(true);
-      }
-    }, 25000);
-
-    return () => clearInterval(interval);
-  }, [state.isOnline, totalPending, state.googleToken, state.setting.spreadsheet_id, state.isSyncing]);
+  // Background Google Sheets synchronization in the background has been removed as requested.
 
   // Initialize Firebase sign-in state caches on load
   useEffect(() => {

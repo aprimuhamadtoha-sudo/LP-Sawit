@@ -119,7 +119,11 @@
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "role_name": { "type": "string" }
+        "role_name": { "type": "string" },
+        "menus": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
       },
       "required": ["id", "role_name"]
     }
